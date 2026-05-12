@@ -1,7 +1,7 @@
 import math
 
 
-def calculate_tm_nn(sequence, conc=50e-9, Na=50e-3):
+def calculate_tm_nn(sequence, conc=50e-9, na=50e-3):
     """
     Calculate melting temperature (Tm) using nearest-neighbor (SantaLucia) model
     and molecular weight of a DNA sequence.
@@ -9,7 +9,7 @@ def calculate_tm_nn(sequence, conc=50e-9, Na=50e-3):
     Parameters:
         sequence (str): DNA sequence (e.g., "ATGC")
         conc (float): Strand concentration in M (default = 50 nM)
-        Na (float): Sodium concentration in M (default = 50 mM)
+        na (float): Sodium (Na) concentration in M (default = 50 mM)
 
     Returns:
         tm (float): Melting temperature in °C
@@ -47,24 +47,24 @@ def calculate_tm_nn(sequence, conc=50e-9, Na=50e-3):
     }
 
     # ---- Initiation values ----
-    delta_H = 0.2  # kcal/mol
-    delta_S = -5.7  # cal/mol*K
+    delta_h = 0.2  # kcal/mol
+    delta_s = -5.7  # cal/mol*K
 
     # ---- Sum nearest-neighbor contributions ----
     for i in range(len(sequence) - 1):
         pair = sequence[i : i + 2]
-        dH, dS = nn_params[pair]
-        delta_H += dH
-        delta_S += dS
+        dh, ds = nn_params[pair]
+        delta_h += dh
+        delta_s += ds
 
     # ---- Gas constant ----
-    R = 1.987  # cal/mol*K
+    r = 1.987  # cal/mol*K
 
     # ---- Tm calculation (Kelvin → Celsius) ----
-    tm = (delta_H * 1000) / (delta_S + R * math.log(conc)) - 273.15
+    tm = (delta_h * 1000) / (delta_s + r * math.log(conc)) - 273.15
 
     # ---- Salt correction ----
-    tm += 16.6 * math.log10(Na)
+    tm += 16.6 * math.log10(na)
 
     # ---- Molecular Weight ----
     weights = {"A": 313.21, "T": 304.2, "G": 329.21, "C": 289.18}
