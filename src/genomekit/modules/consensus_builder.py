@@ -1,12 +1,20 @@
 from collections import Counter
 
+
 class ConsensusBuilder:
-    def __init__(self,sequences_):
+    """
+    Simple progressive Multiple Sequence Alignment (MSA)
+    with consensus sequence generation.
+    """
+
+    def __init__(self, sequences_):
+
         self.sequences = sequences_
         self.aligned = []
         self.profile = None
 
     def _validate(self):
+
         if not self.sequences:
             raise ValueError("No sequences provided")
 
@@ -16,102 +24,206 @@ class ConsensusBuilder:
         allowed = set("ATGCN-")
 
         for seq in self.sequences:
-            bad = set(seq) - allowed
-            if bad:
-                raise ValueError(f"Invalid characters found: {bad}")
 
+            bad = set(seq.upper()) - allowed
+
+            if bad:
+                raise ValueError(
+                    f"Invalid characters found: {bad}"
+                )
 
     def needleman_wunsch(self, seq1, seq2):
         """
-	    Performs a progressive Multiple Sequence Alignment for sequences
+        Global pairwise alignment using Needleman-Wunsch
         """
 
-        match, mismatch, gap = 1, -1, -2
-        n,m = len(seq1), len(seq2)
+        match = 1
+        mismatch = -1
+        gap = -2
 
-        score =[[0]*(m+1) for _ in range(n+1)]
-        trace = [[None]*(m+1) for _ in range(n+1)]
+        n = len(seq1)
+        m = len(seq2)
 
-        for i in range(1, n+1):
+        # scoring matrix
+        score = [
+            [0] * (m + 1)
+            for _ in range(n + 1)
+        ]
+
+        # traceback matrix
+        trace = [
+            [None] * (m + 1)
+            for _ in range(n + 1)
+        ]
+
+        # initialize first column
+        for i in range(1, n + 1):
+
             score[i][0] = i * gap
             trace[i][0] = "up"
 
-        for j in range(1, m+1):
+        # initialize first row
+        for j in range(1, m + 1):
+
             score[0][j] = j * gap
             trace[0][j] = "left"
 
-        for i in range(1, n+1):
-            for j in range(1, m+1):
-                diag = score[i-1][j-1] + (match if seq1[i-1] == seq2[j-1] else mismatch)
-                up = score[i-1][j] + gap
-                left = score[i][j-1] + gap
+        # fill matrices
+        for i in range(1, n + 1):
+
+            for j in range(1, m + 1):
+
+                diag = score[i - 1][j - 1] + (
+                    match
+                    if seq1[i - 1] == seq2[j - 1]
+                    else mismatch
+                )
+
+                up = score[i - 1][j] + gap
+
+                left = score[i][j - 1] + gap
 
                 best = max(diag, up, left)
+
                 score[i][j] = best
 
                 if best == diag:
                     trace[i][j] = "diag"
+
                 elif best == up:
                     trace[i][j] = "up"
+
                 else:
                     trace[i][j] = "left"
 
-        a1, a2 = [], []
-        i, j = n, m
+        # traceback
+        aligned1 = []
+        aligned2 = []
+
+        i = n
+        j = m
 
         while i > 0 or j > 0:
 
-            if i > 0 and j > 0 and trace[i][j] == "diag":
-                a1.append(seq1[i-1])
-                a2.append(seq2[j-1])
+            if (
+                i > 0
+                and j > 0
+                and trace[i][j] == "diag"
+            ):
+
+                aligned1.append(seq1[i - 1])
+                aligned2.append(seq2[j - 1])
+
                 i -= 1
                 j -= 1
 
-            elif i > 0 and (j == 0 or trace[i][j] == "up"):
-                a1.append(seq1[i-1])
-                a2.append("-")
+            elif (
+                i > 0
+                and (
+                    j == 0
+                    or trace[i][j] == "up"
+                )
+            ):
+
+                aligned1.append(seq1[i - 1])
+                aligned2.append("-")
+
                 i -= 1
 
             else:
-                a1.append("-")
-                a2.append(seq2[j-1])
+
+                aligned1.append("-")
+                aligned2.append(seq2[j - 1])
+
                 j -= 1
 
-        return "".join(reversed(a1)), "".join(reversed(a2))
+        return (
+            "".join(reversed(aligned1)),
+            "".join(reversed(aligned2))
+        )
+
+    def propagate_gaps(
+        self,
+        old_alignment,
+        old_ref,
+        new_ref
+    ):
+        """
+        Insert new gaps into all previously aligned sequences
+        based on updated reference alignment.
+        """
+
+        updated_alignment = []
+
+        for seq in old_alignment:
+
+            new_seq = []
+
+            old_index = 0
+
+            for char in new_ref:
+
+                if char == "-":
+
+                    new_seq.append("-")
+
+                else:
+
+                    new_seq.append(seq[old_index])
+                    old_index += 1
+
+            updated_alignment.append(
+                "".join(new_seq)
+            )
+
+        return updated_alignment
 
     def build_msa(self):
-    	        
+
+        self._validate()
+
         # start with first sequence
-        #self.aligned = [self.sequences[0]]
+        self.aligned = [self.sequences[0]]
 
-        for seq in self.sequences[0:]:
+        # progressively align remaining sequences
+        for seq in self.sequences[1:]:
 
-            new_aligned = []
+            current_ref = self.aligned[0]
 
-            #ref = self.aligned[0]
-            ref = self.consensus() if self.aligned else self.sequences[0]
+            ref_aln, seq_aln = self.needleman_wunsch(
+                current_ref,
+                seq
+            )
 
-            ref_aln, seq_aln = self.needleman_wunsch(ref, seq)
+            # update previous aligned sequences
+            updated_alignment = self.propagate_gaps(
+                self.aligned,
+                current_ref,
+                ref_aln
+            )
 
-            new_aligned.append(ref_aln)
-            new_aligned.append(seq_aln)
+            # add new sequence
+            updated_alignment.append(seq_aln)
 
-            for old_seq in self.aligned[1:]:
-                _, updated = self.needleman_wunsch(ref_aln, old_seq)
-                new_aligned.append(updated)
+            self.aligned = updated_alignment
 
-            self.aligned = new_aligned
+        # reset profile
+        self.profile = None
 
     def build_profile(self):
 
+        if not self.aligned:
+            self.build_msa()
+
         self.profile = []
 
-        for col in zip(*self.aligned, strict=False):
-            counts = Counter(col)
+        for column in zip(*self.aligned):
+
+            counts = Counter(column)
+
             self.profile.append(counts)
 
     def consensus(self):
-        self._validate()
 
         if not self.aligned:
             self.build_msa()
@@ -119,43 +231,108 @@ class ConsensusBuilder:
         if self.profile is None:
             self.build_profile()
 
-        result = []
+        consensus_seq = []
 
-        for col in self.profile:
-            col = dict(col)
-            col.pop("-", None)
+        for column in self.profile:
 
-            if not col:
-                result.append("-")
+            counts = dict(column)
+
+            # ignore gaps
+            counts.pop("-", None)
+
+            if not counts:
+
+                consensus_seq.append("-")
+
             else:
-                result.append(max(col, key=col.get))
 
-        return "".join(result)
+                base = max(
+                    counts,
+                    key=counts.get
+                )
 
-seqs_identical = [
+                consensus_seq.append(base)
+
+        return "".join(consensus_seq)
+
+    def show_alignment(self):
+
+        if not self.aligned:
+            self.build_msa()
+
+        for seq in self.aligned:
+            print(seq)
+
+
+# ---------------------------------------------------
+# TESTS
+# ---------------------------------------------------
+
+print("\nTEST 1: Similar sequences")
+
+seqs1 = [
     "ATAC",
     "ATAC",
     "ATGC"
 ]
 
-cb = ConsensusBuilder(seqs_identical)
-print(cb.consensus())
+cb1 = ConsensusBuilder(seqs1)
 
-seqs_variation = [
+cb1.build_msa()
+
+cb1.show_alignment()
+
+print("Consensus:", cb1.consensus())
+
+
+print("\nTEST 2: Small variations")
+
+seqs2 = [
     "ATGGTA",
     "ATGCTA",
     "ATGCTA"
 ]
-cb = ConsensusBuilder(seqs_variation)
-print(cb.consensus())
+
+cb2 = ConsensusBuilder(seqs2)
+
+cb2.build_msa()
+
+cb2.show_alignment()
+
+print("Consensus:", cb2.consensus())
 
 
-seqs_diff_len = [
+print("\nTEST 3: Different lengths")
+
+seqs3 = [
     "ATGGTA",
     "ATCT",
     "ATCCTA",
     "ATCA"
 ]
 
-cb2 = ConsensusBuilder(seqs_diff_len)
-print(cb2.consensus())
+cb3 = ConsensusBuilder(seqs3)
+
+cb3.build_msa()
+
+cb3.show_alignment()
+
+print("Consensus:", cb3.consensus())
+
+
+print("\nTEST 4: Highly different lengths")
+
+seqs4 = [
+    "ATGCTAGCTA",
+    "ATGC",
+    "ATGCGCTA",
+    "AT"
+]
+
+cb4 = ConsensusBuilder(seqs4)
+
+cb4.build_msa()
+
+cb4.show_alignment()
+
+print("Consensus:", cb4.consensus())
